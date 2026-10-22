@@ -1,0 +1,33 @@
+
+body {
+    font-family: Arial, sans-serif;
+    background: #fff7ed;
+    text-align: center;
+    padding: 20px;
+}
+
+h1 {
+    color: #e65100;
+}
+
+.food {
+    background: white;
+    padding: 15px;
+    margin: 15px auto;
+    max-width: 350px;
+    border-radius: 10px;
+    box-shadow: 0 2px 5px #ccc;
+}
+
+button {
+    background: #e65100;
+    color: white;
+    border: none;
+    padding: 10px 15px;
+    cursor: pointer;
+    border-radius: 5px;
+}
+
+li {
+    margin: 10px;
+}
