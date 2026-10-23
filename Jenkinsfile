@@ -6,6 +6,7 @@ pipeline {
         IMAGE_NAME = 'food-ordering'
         DEPLOYMENT = 'food-ordering'
         CONTAINER = 'food-ordering'
+        MINIKUBE_PROFILE = 'minikube'
     }
 
     stages {
@@ -26,10 +27,14 @@ pipeline {
             agent { label 'built-in' }
 
             steps {
+                unstash 'source-code'
+
                 sh 'mvn clean test package'
 
-                archiveArtifacts artifacts: 'target/*.jar',
-                                 fingerprint: true
+                archiveArtifacts(
+                    artifacts: 'target/*.jar',
+                    fingerprint: true
+                )
             }
         }
 
@@ -38,7 +43,7 @@ pipeline {
 
             environment {
                 HOME = '/home/ec2-user'
-                MINIKUBE_HOME = '/home/ec2-user'
+                MINIKUBE_HOME = '/home/ec2-user/.minikube'
                 KUBECONFIG = '/home/ec2-user/.kube/config'
                 PATH = '/home/ec2-user/.minikube/bin:/usr/local/bin:/usr/bin:/bin'
             }
@@ -47,30 +52,32 @@ pipeline {
                 unstash 'source-code'
 
                 sh '''
+                    set -eu
+
                     export HOME=/home/ec2-user
-                    export MINIKUBE_HOME=/home/ec2-user
+                    export MINIKUBE_HOME=/home/ec2-user/.minikube
                     export KUBECONFIG=/home/ec2-user/.kube/config
                     export PATH=/home/ec2-user/.minikube/bin:/usr/local/bin:/usr/bin:/bin
 
-                    echo "Current user:"
+                    echo "=== User ==="
                     whoami
 
-                    echo "Minikube executable:"
-                    which minikube
+                    echo "=== Minikube version ==="
+                    minikube version
 
-                    echo "Minikube profile:"
+                    echo "=== Minikube profile ==="
                     minikube profile list
 
-                    echo "Minikube status:"
+                    echo "=== Minikube status ==="
                     minikube status -p minikube
 
-                    echo "Kubernetes nodes:"
+                    echo "=== Kubernetes nodes ==="
                     kubectl get nodes
 
-                    echo "Building application image:"
+                    echo "=== Build application image ==="
                     minikube image build \
-                      -p minikube \
-                      -t ${IMAGE_NAME}:${BUILD_NUMBER} .
+                        -p minikube \
+                        -t food-ordering:${BUILD_NUMBER} .
                 '''
             }
         }
@@ -80,7 +87,7 @@ pipeline {
 
             environment {
                 HOME = '/home/ec2-user'
-                MINIKUBE_HOME = '/home/ec2-user'
+                MINIKUBE_HOME = '/home/ec2-user/.minikube'
                 KUBECONFIG = '/home/ec2-user/.kube/config'
                 PATH = '/home/ec2-user/.minikube/bin:/usr/local/bin:/usr/bin:/bin'
             }
@@ -89,33 +96,35 @@ pipeline {
                 unstash 'source-code'
 
                 sh '''
+                    set -eu
+
                     export HOME=/home/ec2-user
-                    export MINIKUBE_HOME=/home/ec2-user
+                    export MINIKUBE_HOME=/home/ec2-user/.minikube
                     export KUBECONFIG=/home/ec2-user/.kube/config
                     export PATH=/home/ec2-user/.minikube/bin:/usr/local/bin:/usr/bin:/bin
 
-                    echo "Checking Kubernetes connection:"
+                    echo "=== Kubernetes connection ==="
                     kubectl config use-context minikube
                     kubectl get nodes
 
-                    echo "Applying Kubernetes deployment:"
+                    echo "=== Apply Kubernetes manifests ==="
                     kubectl apply -f k8s/deployment.yaml
                     kubectl apply -f k8s/service.yaml
 
-                    echo "Updating application image:"
+                    echo "=== Update application image ==="
                     kubectl set image \
-                      deployment/${DEPLOYMENT} \
-                      ${CONTAINER}=${IMAGE_NAME}:${BUILD_NUMBER}
+                        deployment/food-ordering \
+                        food-ordering=food-ordering:${BUILD_NUMBER}
 
-                    echo "Waiting for deployment:"
+                    echo "=== Wait for rollout ==="
                     kubectl rollout status \
-                      deployment/${DEPLOYMENT} \
-                      --timeout=180s
+                        deployment/food-ordering \
+                        --timeout=180s
 
-                    echo "Application pods:"
+                    echo "=== Application pods ==="
                     kubectl get pods
 
-                    echo "Application services:"
+                    echo "=== Application services ==="
                     kubectl get services
                 '''
             }
@@ -128,7 +137,7 @@ pipeline {
         }
 
         failure {
-            echo 'Pipeline failed. Check Console Output.'
+            echo 'Pipeline failed. Check Console Output for the failing stage.'
         }
 
         always {
@@ -136,4 +145,3 @@ pipeline {
         }
     }
 }
-
