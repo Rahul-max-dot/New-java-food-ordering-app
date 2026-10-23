@@ -46,14 +46,25 @@ pipeline {
                 unstash 'source-code'
 
                 sh '''
-                    echo "User: $(whoami)"
-                    echo "HOME=$HOME"
+                    export HOME=/home/ec2-user
+                    export MINIKUBE_HOME=/home/ec2-user
+                    export KUBECONFIG=/home/ec2-user/.kube/config
 
+                    echo "Current user:"
+                    whoami
+
+                    echo "Minikube profile:"
                     minikube profile list
-                    minikube status
+
+                    echo "Minikube status:"
+                    minikube status -p minikube
+
+                    echo "Kubernetes nodes:"
                     kubectl get nodes
 
+                    echo "Building application image:"
                     minikube image build \
+                      -p minikube \
                       -t ${IMAGE_NAME}:${BUILD_NUMBER} .
                 '''
             }
@@ -72,21 +83,32 @@ pipeline {
                 unstash 'source-code'
 
                 sh '''
+                    export HOME=/home/ec2-user
+                    export MINIKUBE_HOME=/home/ec2-user
+                    export KUBECONFIG=/home/ec2-user/.kube/config
+
+                    echo "Checking Kubernetes connection:"
                     kubectl config use-context minikube
                     kubectl get nodes
 
+                    echo "Applying Kubernetes deployment:"
                     kubectl apply -f k8s/deployment.yaml
                     kubectl apply -f k8s/service.yaml
 
+                    echo "Updating application image:"
                     kubectl set image \
                       deployment/${DEPLOYMENT} \
                       ${CONTAINER}=${IMAGE_NAME}:${BUILD_NUMBER}
 
+                    echo "Waiting for deployment:"
                     kubectl rollout status \
                       deployment/${DEPLOYMENT} \
                       --timeout=180s
 
+                    echo "Application pods:"
                     kubectl get pods
+
+                    echo "Application services:"
                     kubectl get services
                 '''
             }
