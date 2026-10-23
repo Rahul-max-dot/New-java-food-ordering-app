@@ -29,7 +29,18 @@ pipeline {
             steps {
                 unstash 'source-code'
 
-                sh 'mvn clean test package'
+                sh '''
+                    set -e
+
+                    echo "=== Java Version ==="
+                    java -version
+
+                    echo "=== Maven Version ==="
+                    mvn -version
+
+                    echo "=== Build and Test Application ==="
+                    mvn clean test package
+                '''
 
                 archiveArtifacts(
                     artifacts: 'target/*.jar',
@@ -52,39 +63,35 @@ pipeline {
                 unstash 'source-code'
 
                 sh '''
-                    set -eu
+                    set -e
 
                     export HOME=/home/ec2-user
                     export MINIKUBE_HOME=/home/ec2-user
                     export KUBECONFIG=/home/ec2-user/.kube/config
                     export PATH=/usr/local/bin:/usr/bin:/bin
 
-                    echo "=== User ==="
+                    echo "=== Agent Information ==="
+                    hostname
                     whoami
-                    id
+                    pwd
 
-                    echo "=== Environment ==="
-                    env | grep -E '^(HOME|MINIKUBE_HOME|MINIKUBE_PROFILE|KUBECONFIG)=' || true
+                    echo "=== Verify Minikube Files ==="
+                    ls -la /home/ec2-user/.minikube/profiles/minikube/
+                    ls -l /home/ec2-user/.kube/config
 
-                    echo "=== Profile file ==="
-                    ls -l /home/ec2-user/.minikube/profiles/minikube/config.json
-
-                    echo "=== Minikube version ==="
-                    /usr/local/bin/minikube version
-
-                    echo "=== Minikube profile ==="
-                    /usr/local/bin/minikube profile list
-
-                    echo "=== Minikube status ==="
+                    echo "=== Check Minikube ==="
                     /usr/local/bin/minikube status -p minikube
 
-                    echo "=== Kubernetes nodes ==="
+                    echo "=== Check Kubernetes Nodes ==="
                     kubectl get nodes
 
-                    echo "=== Build application image ==="
+                    echo "=== Build Application Image ==="
                     /usr/local/bin/minikube image build \
                         -p minikube \
                         -t food-ordering:${BUILD_NUMBER} .
+
+                    echo "=== Verify Image ==="
+                    /usr/local/bin/minikube image ls -p minikube
                 '''
             }
         }
@@ -103,16 +110,20 @@ pipeline {
                 unstash 'source-code'
 
                 sh '''
-                    set -eu
+                    set -e
 
                     export HOME=/home/ec2-user
                     export MINIKUBE_HOME=/home/ec2-user
                     export KUBECONFIG=/home/ec2-user/.kube/config
                     export PATH=/usr/local/bin:/usr/bin:/bin
 
-                    echo "=== Kubernetes connection ==="
+                    echo "=== Verify Kubernetes Connection ==="
                     kubectl config use-context minikube
                     kubectl get nodes
+
+                    echo "=== Verify Kubernetes Manifests ==="
+                    test -f k8s/deployment.yaml
+                    test -f k8s/service.yaml
 
                     echo "=== Apply Deployment ==="
                     kubectl apply -f k8s/deployment.yaml
@@ -120,20 +131,20 @@ pipeline {
                     echo "=== Apply Service ==="
                     kubectl apply -f k8s/service.yaml
 
-                    echo "=== Update application image ==="
+                    echo "=== Update Application Image ==="
                     kubectl set image \
-                        deployment/food-ordering \
-                        food-ordering=food-ordering:${BUILD_NUMBER}
+                        deployment/${DEPLOYMENT} \
+                        ${CONTAINER}=${IMAGE_NAME}:${BUILD_NUMBER}
 
-                    echo "=== Wait for rollout ==="
+                    echo "=== Wait for Deployment ==="
                     kubectl rollout status \
-                        deployment/food-ordering \
+                        deployment/${DEPLOYMENT} \
                         --timeout=180s
 
-                    echo "=== Application pods ==="
-                    kubectl get pods
+                    echo "=== Check Pods ==="
+                    kubectl get pods -o wide
 
-                    echo "=== Application services ==="
+                    echo "=== Check Services ==="
                     kubectl get services
                 '''
             }
@@ -154,4 +165,3 @@ pipeline {
         }
     }
 }
-
