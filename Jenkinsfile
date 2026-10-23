@@ -15,6 +15,7 @@ pipeline {
 
             steps {
                 checkout scm
+
                 stash name: 'source-code',
                       includes: '**/*',
                       excludes: '.git/**'
@@ -35,11 +36,23 @@ pipeline {
         stage('Build Image in Minikube') {
             agent { label 'minikube-agent' }
 
+            environment {
+                HOME = '/home/ec2-user'
+                MINIKUBE_HOME = '/home/ec2-user'
+                KUBECONFIG = '/home/ec2-user/.kube/config'
+            }
+
             steps {
                 unstash 'source-code'
 
                 sh '''
+                    echo "User: $(whoami)"
+                    echo "HOME=$HOME"
+
+                    minikube profile list
                     minikube status
+                    kubectl get nodes
+
                     minikube image build \
                       -t ${IMAGE_NAME}:${BUILD_NUMBER} .
                 '''
@@ -49,7 +62,15 @@ pipeline {
         stage('Deploy to Kubernetes') {
             agent { label 'minikube-agent' }
 
+            environment {
+                HOME = '/home/ec2-user'
+                MINIKUBE_HOME = '/home/ec2-user'
+                KUBECONFIG = '/home/ec2-user/.kube/config'
+            }
+
             steps {
+                unstash 'source-code'
+
                 sh '''
                     kubectl config use-context minikube
                     kubectl get nodes
