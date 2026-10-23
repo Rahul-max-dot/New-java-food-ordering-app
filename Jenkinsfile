@@ -40,6 +40,7 @@ pipeline {
                 HOME = '/home/ec2-user'
                 MINIKUBE_HOME = '/home/ec2-user'
                 KUBECONFIG = '/home/ec2-user/.kube/config'
+                PATH = '/home/ec2-user/.minikube/bin:/usr/local/bin:/usr/bin:/bin'
             }
 
             steps {
@@ -49,9 +50,13 @@ pipeline {
                     export HOME=/home/ec2-user
                     export MINIKUBE_HOME=/home/ec2-user
                     export KUBECONFIG=/home/ec2-user/.kube/config
+                    export PATH=/home/ec2-user/.minikube/bin:/usr/local/bin:/usr/bin:/bin
 
                     echo "Current user:"
                     whoami
+
+                    echo "Minikube executable:"
+                    which minikube
 
                     echo "Minikube profile:"
                     minikube profile list
@@ -77,6 +82,7 @@ pipeline {
                 HOME = '/home/ec2-user'
                 MINIKUBE_HOME = '/home/ec2-user'
                 KUBECONFIG = '/home/ec2-user/.kube/config'
+                PATH = '/home/ec2-user/.minikube/bin:/usr/local/bin:/usr/bin:/bin'
             }
 
             steps {
@@ -86,6 +92,7 @@ pipeline {
                     export HOME=/home/ec2-user
                     export MINIKUBE_HOME=/home/ec2-user
                     export KUBECONFIG=/home/ec2-user/.kube/config
+                    export PATH=/home/ec2-user/.minikube/bin:/usr/local/bin:/usr/bin:/bin
 
                     echo "Checking Kubernetes connection:"
                     kubectl config use-context minikube
