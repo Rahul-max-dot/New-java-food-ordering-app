@@ -59,17 +59,30 @@ pipeline {
                     export KUBECONFIG=/home/ec2-user/.kube/config
                     export PATH=/usr/local/bin:/usr/bin:/bin
 
-                    echo "=== Check Minikube profile ==="
-                    minikube profile list
+                    echo "=== User ==="
+                    whoami
+                    id
 
-                    echo "=== Check Minikube status ==="
-                    minikube status -p minikube
+                    echo "=== Environment ==="
+                    env | grep -E '^(HOME|MINIKUBE_HOME|MINIKUBE_PROFILE|KUBECONFIG)=' || true
 
-                    echo "=== Check Kubernetes node ==="
+                    echo "=== Profile file ==="
+                    ls -l /home/ec2-user/.minikube/profiles/minikube/config.json
+
+                    echo "=== Minikube version ==="
+                    /usr/local/bin/minikube version
+
+                    echo "=== Minikube profile ==="
+                    /usr/local/bin/minikube profile list
+
+                    echo "=== Minikube status ==="
+                    /usr/local/bin/minikube status -p minikube
+
+                    echo "=== Kubernetes nodes ==="
                     kubectl get nodes
 
                     echo "=== Build application image ==="
-                    minikube image build \
+                    /usr/local/bin/minikube image build \
                         -p minikube \
                         -t food-ordering:${BUILD_NUMBER} .
                 '''
@@ -97,7 +110,7 @@ pipeline {
                     export KUBECONFIG=/home/ec2-user/.kube/config
                     export PATH=/usr/local/bin:/usr/bin:/bin
 
-                    echo "=== Verify Kubernetes access ==="
+                    echo "=== Kubernetes connection ==="
                     kubectl config use-context minikube
                     kubectl get nodes
 
@@ -133,7 +146,7 @@ pipeline {
         }
 
         failure {
-            echo 'FAILED: Check the Console Output for the failing stage.'
+            echo 'FAILED: Check Console Output for the exact error.'
         }
 
         always {
@@ -141,3 +154,4 @@ pipeline {
         }
     }
 }
+
