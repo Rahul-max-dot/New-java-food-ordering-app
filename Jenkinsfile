@@ -43,9 +43,9 @@ pipeline {
 
             environment {
                 HOME = '/home/ec2-user'
-                MINIKUBE_HOME = '/home/ec2-user/.minikube'
+                MINIKUBE_HOME = '/home/ec2-user'
                 KUBECONFIG = '/home/ec2-user/.kube/config'
-                PATH = '/home/ec2-user/.minikube/bin:/usr/local/bin:/usr/bin:/bin'
+                PATH = '/usr/local/bin:/usr/bin:/bin'
             }
 
             steps {
@@ -55,23 +55,17 @@ pipeline {
                     set -eu
 
                     export HOME=/home/ec2-user
-                    export MINIKUBE_HOME=/home/ec2-user/.minikube
+                    export MINIKUBE_HOME=/home/ec2-user
                     export KUBECONFIG=/home/ec2-user/.kube/config
-                    export PATH=/home/ec2-user/.minikube/bin:/usr/local/bin:/usr/bin:/bin
+                    export PATH=/usr/local/bin:/usr/bin:/bin
 
-                    echo "=== User ==="
-                    whoami
-
-                    echo "=== Minikube version ==="
-                    minikube version
-
-                    echo "=== Minikube profile ==="
+                    echo "=== Check Minikube profile ==="
                     minikube profile list
 
-                    echo "=== Minikube status ==="
+                    echo "=== Check Minikube status ==="
                     minikube status -p minikube
 
-                    echo "=== Kubernetes nodes ==="
+                    echo "=== Check Kubernetes node ==="
                     kubectl get nodes
 
                     echo "=== Build application image ==="
@@ -87,9 +81,9 @@ pipeline {
 
             environment {
                 HOME = '/home/ec2-user'
-                MINIKUBE_HOME = '/home/ec2-user/.minikube'
+                MINIKUBE_HOME = '/home/ec2-user'
                 KUBECONFIG = '/home/ec2-user/.kube/config'
-                PATH = '/home/ec2-user/.minikube/bin:/usr/local/bin:/usr/bin:/bin'
+                PATH = '/usr/local/bin:/usr/bin:/bin'
             }
 
             steps {
@@ -99,16 +93,18 @@ pipeline {
                     set -eu
 
                     export HOME=/home/ec2-user
-                    export MINIKUBE_HOME=/home/ec2-user/.minikube
+                    export MINIKUBE_HOME=/home/ec2-user
                     export KUBECONFIG=/home/ec2-user/.kube/config
-                    export PATH=/home/ec2-user/.minikube/bin:/usr/local/bin:/usr/bin:/bin
+                    export PATH=/usr/local/bin:/usr/bin:/bin
 
-                    echo "=== Kubernetes connection ==="
+                    echo "=== Verify Kubernetes access ==="
                     kubectl config use-context minikube
                     kubectl get nodes
 
-                    echo "=== Apply Kubernetes manifests ==="
+                    echo "=== Apply Deployment ==="
                     kubectl apply -f k8s/deployment.yaml
+
+                    echo "=== Apply Service ==="
                     kubectl apply -f k8s/service.yaml
 
                     echo "=== Update application image ==="
@@ -133,11 +129,11 @@ pipeline {
 
     post {
         success {
-            echo 'Successfully deployed to Minikube!'
+            echo 'SUCCESS: Food Ordering application deployed to Minikube!'
         }
 
         failure {
-            echo 'Pipeline failed. Check Console Output for the failing stage.'
+            echo 'FAILED: Check the Console Output for the failing stage.'
         }
 
         always {
