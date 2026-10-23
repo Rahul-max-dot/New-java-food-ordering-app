@@ -31,14 +31,13 @@ pipeline {
 
                 sh '''
                     set -e
-
                     echo "=== Java Version ==="
                     java -version
 
                     echo "=== Maven Version ==="
                     mvn -version
 
-                    echo "=== Build and Test Application ==="
+                    echo "=== Build and Test ==="
                     mvn clean test package
                 '''
 
@@ -46,6 +45,36 @@ pipeline {
                     artifacts: 'target/*.jar',
                     fingerprint: true
                 )
+            }
+        }
+
+        stage('Check Minikube Agent') {
+            agent { label 'minikube-agent' }
+
+            steps {
+                sh '''
+                    echo "=== Agent Hostname ==="
+                    hostname
+
+                    echo "=== Agent User ==="
+                    whoami
+
+                    echo "=== Home Directory ==="
+                    echo "HOME=$HOME"
+                    pwd
+
+                    echo "=== Minikube Directory ==="
+                    ls -ld /home/ec2-user/.minikube || true
+
+                    echo "=== Minikube Profile ==="
+                    ls -l /home/ec2-user/.minikube/profiles/minikube/config.json || true
+
+                    echo "=== Kubernetes Config ==="
+                    ls -l /home/ec2-user/.kube/config || true
+
+                    echo "=== Find Profile ==="
+                    find /home /root -path '*/profiles/minikube/config.json' 2>/dev/null || true
+                '''
             }
         }
 
@@ -70,19 +99,14 @@ pipeline {
                     export KUBECONFIG=/home/ec2-user/.kube/config
                     export PATH=/usr/local/bin:/usr/bin:/bin
 
-                    echo "=== Agent Information ==="
-                    hostname
-                    whoami
-                    pwd
+                    echo "=== Verify Minikube Configuration ==="
+                    test -f /home/ec2-user/.minikube/profiles/minikube/config.json
+                    test -f /home/ec2-user/.kube/config
 
-                    echo "=== Verify Minikube Files ==="
-                    ls -la /home/ec2-user/.minikube/profiles/minikube/
-                    ls -l /home/ec2-user/.kube/config
-
-                    echo "=== Check Minikube ==="
+                    echo "=== Minikube Status ==="
                     /usr/local/bin/minikube status -p minikube
 
-                    echo "=== Check Kubernetes Nodes ==="
+                    echo "=== Kubernetes Nodes ==="
                     kubectl get nodes
 
                     echo "=== Build Application Image ==="
@@ -117,11 +141,11 @@ pipeline {
                     export KUBECONFIG=/home/ec2-user/.kube/config
                     export PATH=/usr/local/bin:/usr/bin:/bin
 
-                    echo "=== Verify Kubernetes Connection ==="
+                    echo "=== Kubernetes Connection ==="
                     kubectl config use-context minikube
                     kubectl get nodes
 
-                    echo "=== Verify Kubernetes Manifests ==="
+                    echo "=== Verify Kubernetes Files ==="
                     test -f k8s/deployment.yaml
                     test -f k8s/service.yaml
 
@@ -131,20 +155,20 @@ pipeline {
                     echo "=== Apply Service ==="
                     kubectl apply -f k8s/service.yaml
 
-                    echo "=== Update Application Image ==="
+                    echo "=== Update Image ==="
                     kubectl set image \
                         deployment/${DEPLOYMENT} \
                         ${CONTAINER}=${IMAGE_NAME}:${BUILD_NUMBER}
 
-                    echo "=== Wait for Deployment ==="
+                    echo "=== Wait for Rollout ==="
                     kubectl rollout status \
                         deployment/${DEPLOYMENT} \
                         --timeout=180s
 
-                    echo "=== Check Pods ==="
+                    echo "=== Pods ==="
                     kubectl get pods -o wide
 
-                    echo "=== Check Services ==="
+                    echo "=== Services ==="
                     kubectl get services
                 '''
             }
@@ -153,11 +177,11 @@ pipeline {
 
     post {
         success {
-            echo 'SUCCESS: Food Ordering application deployed to Minikube!'
+            echo 'SUCCESS: Food Ordering application deployed!'
         }
 
         failure {
-            echo 'FAILED: Check Console Output for the exact error.'
+            echo 'FAILED: Check the stage that failed in Console Output.'
         }
 
         always {
