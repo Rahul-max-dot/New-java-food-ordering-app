@@ -1,6 +1,12 @@
-
+```groovy
 pipeline {
     agent none
+
+    options {
+        skipDefaultCheckout(true)
+        timestamps()
+        disableConcurrentBuilds()
+    }
 
     environment {
         IMAGE_NAME = 'food-ordering'
@@ -18,7 +24,14 @@ pipeline {
             agent { label 'built-in' }
 
             steps {
+                deleteDir()
                 checkout scm
+
+                echo '=== Latest Git Commit ==='
+                sh '''
+                    git log -1 --oneline
+                    echo "Build number: ${BUILD_NUMBER}"
+                '''
 
                 stash name: 'source-code',
                       includes: '**/*',
@@ -30,10 +43,11 @@ pipeline {
             agent { label 'built-in' }
 
             steps {
+                deleteDir()
                 unstash 'source-code'
 
                 sh '''
-                    set -e
+                    set -eu
 
                     echo "=== Java Version ==="
                     java -version
@@ -43,48 +57,28 @@ pipeline {
 
                     echo "=== Build and Test ==="
                     mvn clean test package
+
+                    echo "=== Verify JAR ==="
+                    test -f target/food-ordering-0.0.1-SNAPSHOT.jar
+                    ls -lh target/food-ordering-0.0.1-SNAPSHOT.jar
+
+                    echo "=== Check Packaged Application Resources ==="
+                    jar tf target/food-ordering-0.0.1-SNAPSHOT.jar \
+                      | grep -E 'BOOT-INF/classes/(static|templates)/.*index.html' \
+                      || true
                 '''
 
                 archiveArtifacts(
                     artifacts: 'target/*.jar',
                     fingerprint: true
                 )
+
+                stash name: 'built-application',
+                      includes: 'target/*.jar'
             }
         }
 
         stage('Check Minikube Agent') {
-            agent { label 'minikube-agent' }
-
-            steps {
-                sh '''
-                    echo "=== Agent Hostname ==="
-                    hostname
-
-                    echo "=== Agent User ==="
-                    whoami
-
-                    echo "=== Home Directory ==="
-                    echo "HOME=$HOME"
-                    pwd
-
-                    echo "=== Minikube Directory ==="
-                    ls -ld /home/ec2-user/.minikube || true
-
-                    echo "=== Minikube Profile ==="
-                    ls -l /home/ec2-user/.minikube/profiles/minikube/config.json || true
-
-                    echo "=== Kubernetes Config ==="
-                    ls -l /home/ec2-user/.kube/config || true
-
-                    echo "=== Find Profile ==="
-                    find /home /root \
-                      -path '*/profiles/minikube/config.json' \
-                      2>/dev/null || true
-                '''
-            }
-        }
-
-        stage('Build Image in Minikube') {
             agent { label 'minikube-agent' }
 
             environment {
@@ -95,33 +89,62 @@ pipeline {
             }
 
             steps {
-                unstash 'source-code'
-
                 sh '''
-                    set -e
+                    set -eu
 
-                    export HOME=/home/ec2-user
-                    export MINIKUBE_HOME=/home/ec2-user
-                    export KUBECONFIG=/home/ec2-user/.kube/config
-                    export PATH=/usr/local/bin:/usr/bin:/bin
+                    echo "=== Agent ==="
+                    hostname
+                    whoami
 
-                    echo "=== Verify Minikube Configuration ==="
+                    echo "=== Minikube Configuration ==="
                     test -f /home/ec2-user/.minikube/profiles/minikube/config.json
                     test -f /home/ec2-user/.kube/config
 
                     echo "=== Minikube Status ==="
                     /usr/local/bin/minikube status -p minikube
 
-                    echo "=== Kubernetes Nodes ==="
+                    echo "=== Kubernetes Context ==="
+                    kubectl config current-context
                     kubectl get nodes
+                '''
+            }
+        }
 
-                    echo "=== Build Application Image ==="
+        stage('Build Fresh Image') {
+            agent { label 'minikube-agent' }
+
+            environment {
+                HOME = '/home/ec2-user'
+                MINIKUBE_HOME = '/home/ec2-user'
+                KUBECONFIG = '/home/ec2-user/.kube/config'
+                PATH = '/usr/local/bin:/usr/bin:/bin'
+            }
+
+            steps {
+                deleteDir()
+                unstash 'source-code'
+                unstash 'built-application'
+
+                sh '''
+                    set -eu
+
+                    export HOME=/home/ec2-user
+                    export MINIKUBE_HOME=/home/ec2-user
+                    export KUBECONFIG=/home/ec2-user/.kube/config
+                    export PATH=/usr/local/bin:/usr/bin:/bin
+
+                    echo "=== Verify Built JAR ==="
+                    test -f target/food-ordering-0.0.1-SNAPSHOT.jar
+
+                    echo "=== Build Unique Image Without Cache ==="
                     /usr/local/bin/minikube image build \
-                        -p minikube \
-                        -t food-ordering:${BUILD_NUMBER} .
+                        --no-cache \
+                        -p "${MINIKUBE_PROFILE}" \
+                        -t "${IMAGE_NAME}:${BUILD_NUMBER}" .
 
-                    echo "=== Verify Image ==="
-                    /usr/local/bin/minikube image ls -p minikube
+                    echo "=== Verify Image Exists ==="
+                    /usr/local/bin/minikube image ls -p "${MINIKUBE_PROFILE}" \
+                        | grep -F "${IMAGE_NAME}:${BUILD_NUMBER}"
                 '''
             }
         }
@@ -137,31 +160,30 @@ pipeline {
             }
 
             steps {
+                deleteDir()
                 unstash 'source-code'
 
                 sh '''
-                    set -e
+                    set -eu
 
                     export HOME=/home/ec2-user
                     export MINIKUBE_HOME=/home/ec2-user
                     export KUBECONFIG=/home/ec2-user/.kube/config
                     export PATH=/usr/local/bin:/usr/bin:/bin
 
-                    echo "=== Kubernetes Connection ==="
+                    echo "=== Verify Kubernetes Connection ==="
                     kubectl config use-context minikube
                     kubectl get nodes
 
-                    echo "=== Verify Kubernetes Files ==="
+                    echo "=== Verify Manifest Files ==="
                     test -f k8s/deployment.yaml
                     test -f k8s/service.yaml
 
-                    echo "=== Apply Deployment ==="
+                    echo "=== Apply Kubernetes Manifests ==="
                     kubectl apply -f k8s/deployment.yaml
-
-                    echo "=== Apply Service ==="
                     kubectl apply -f k8s/service.yaml
 
-                    echo "=== Update Image ==="
+                    echo "=== Update Deployment Image ==="
                     kubectl set image \
                         deployment/${DEPLOYMENT} \
                         ${CONTAINER}=${IMAGE_NAME}:${BUILD_NUMBER}
@@ -171,13 +193,23 @@ pipeline {
                         deployment/${DEPLOYMENT} \
                         --timeout=180s
 
+                    echo "=== Verify Deployment Image ==="
+                    kubectl get deployment "${DEPLOYMENT}" \
+                        -o jsonpath='{.spec.template.spec.containers[?(@.name=="food-ordering")].image}'
+                    echo
+
                     echo "=== Verify Pods ==="
                     kubectl get pods -o wide
 
-                    echo "=== Verify Services ==="
-                    kubectl get services
+                    echo "=== Verify Service ==="
+                    kubectl get service food-ordering-service
 
-                    echo "=== Deployment Health Check Passed ==="
+                    echo "=== Verify Running Container Image ==="
+                    kubectl get pods \
+                        -l app=food-ordering \
+                        -o jsonpath='{range .items[*]}{.metadata.name}{" : "}{.spec.containers[0].image}{"\\n"}{end}'
+
+                    echo "=== Deployment Successful ==="
                 '''
             }
         }
@@ -189,47 +221,53 @@ pipeline {
 
             script {
                 node('minikube-agent') {
-                    sh '''
-                        echo "=== CloudWatch: Pipeline Success ==="
+                    withEnv([
+                        "METRIC_STATUS=1"
+                    ]) {
+                        sh '''
+                            echo "=== CloudWatch Success Metric ==="
 
-                        if ! command -v aws >/dev/null 2>&1; then
-                            echo "WARNING: AWS CLI is not installed."
-                            exit 0
-                        fi
-
-                        aws cloudwatch put-metric-data \
-                            --namespace "$CLOUDWATCH_NAMESPACE" \
-                            --metric-name PipelineStatus \
-                            --value 1 \
-                            --unit Count \
-                            --region "$AWS_REGION" \
-                        || echo "WARNING: Failed to publish success metric."
-                    '''
+                            if command -v aws >/dev/null 2>&1; then
+                                aws cloudwatch put-metric-data \
+                                    --namespace "${CLOUDWATCH_NAMESPACE}" \
+                                    --metric-name PipelineStatus \
+                                    --value "${METRIC_STATUS}" \
+                                    --unit Count \
+                                    --region "${AWS_REGION}" \
+                                || echo "WARNING: CloudWatch metric failed."
+                            else
+                                echo "WARNING: AWS CLI is not installed."
+                            fi
+                        '''
+                    }
                 }
             }
         }
 
         failure {
-            echo 'FAILED: Check the stage that failed in Console Output.'
+            echo 'FAILED: Check the failed stage in Console Output.'
 
             script {
                 node('minikube-agent') {
-                    sh '''
-                        echo "=== CloudWatch: Pipeline Failure ==="
+                    withEnv([
+                        "METRIC_STATUS=0"
+                    ]) {
+                        sh '''
+                            echo "=== CloudWatch Failure Metric ==="
 
-                        if ! command -v aws >/dev/null 2>&1; then
-                            echo "WARNING: AWS CLI is not installed."
-                            exit 0
-                        fi
-
-                        aws cloudwatch put-metric-data \
-                            --namespace "$CLOUDWATCH_NAMESPACE" \
-                            --metric-name PipelineStatus \
-                            --value 0 \
-                            --unit Count \
-                            --region "$AWS_REGION" \
-                        || echo "WARNING: Failed to publish failure metric."
-                    '''
+                            if command -v aws >/dev/null 2>&1; then
+                                aws cloudwatch put-metric-data \
+                                    --namespace "${CLOUDWATCH_NAMESPACE}" \
+                                    --metric-name PipelineStatus \
+                                    --value "${METRIC_STATUS}" \
+                                    --unit Count \
+                                    --region "${AWS_REGION}" \
+                                || echo "WARNING: CloudWatch metric failed."
+                            else
+                                echo "WARNING: AWS CLI is not installed."
+                            fi
+                        '''
+                    }
                 }
             }
         }
@@ -240,3 +278,4 @@ pipeline {
         }
     }
 }
+```
