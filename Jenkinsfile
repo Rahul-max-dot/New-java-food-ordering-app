@@ -7,6 +7,9 @@ pipeline {
         DEPLOYMENT = 'food-ordering'
         CONTAINER = 'food-ordering'
         MINIKUBE_PROFILE = 'minikube'
+
+        AWS_REGION = 'ap-southeast-2'
+        CLOUDWATCH_NAMESPACE = 'FoodOrdering/CI-CD'
     }
 
     stages {
@@ -31,6 +34,7 @@ pipeline {
 
                 sh '''
                     set -e
+
                     echo "=== Java Version ==="
                     java -version
 
@@ -73,7 +77,9 @@ pipeline {
                     ls -l /home/ec2-user/.kube/config || true
 
                     echo "=== Find Profile ==="
-                    find /home /root -path '*/profiles/minikube/config.json' 2>/dev/null || true
+                    find /home /root \
+                        -path '*/profiles/minikube/config.json' \
+                        2>/dev/null || true
                 '''
             }
         }
@@ -165,27 +171,79 @@ pipeline {
                         deployment/${DEPLOYMENT} \
                         --timeout=180s
 
-                    echo "=== Pods ==="
+                    echo "=== Verify Pods ==="
                     kubectl get pods -o wide
 
-                    echo "=== Services ==="
+                    echo "=== Verify Services ==="
                     kubectl get services
+
+                    echo "=== Deployment Health Check Passed ==="
                 '''
             }
         }
     }
 
     post {
+
         success {
             echo 'SUCCESS: Food Ordering application deployed!'
+
+            script {
+                node('minikube-agent') {
+                    sh '''
+                        echo "=== CloudWatch: Pipeline Success ==="
+
+                        if ! command -v aws >/dev/null 2>&1; then
+                            echo "WARNING: AWS CLI is not installed."
+                            exit 0
+                        fi
+
+                        aws cloudwatch put-metric-data \
+                            --namespace "$CLOUDWATCH_NAMESPACE" \
+                            --metric-name PipelineStatus \
+                            --value 1 \
+                            --unit Count \
+                            --dimensions \
+                                Application=FoodOrdering \
+                                Pipeline=Jenkins \
+                            --region "$AWS_REGION" \
+                        || echo "WARNING: Failed to publish success metric."
+                    '''
+                }
+            }
         }
 
         failure {
             echo 'FAILED: Check the stage that failed in Console Output.'
+
+            script {
+                node('minikube-agent') {
+                    sh '''
+                        echo "=== CloudWatch: Pipeline Failure ==="
+
+                        if ! command -v aws >/dev/null 2>&1; then
+                            echo "WARNING: AWS CLI is not installed."
+                            exit 0
+                        fi
+
+                        aws cloudwatch put-metric-data \
+                            --namespace "$CLOUDWATCH_NAMESPACE" \
+                            --metric-name PipelineStatus \
+                            --value 0 \
+                            --unit Count \
+                            --dimensions \
+                                Application=FoodOrdering \
+                                Pipeline=Jenkins \
+                            --region "$AWS_REGION" \
+                        || echo "WARNING: Failed to publish failure metric."
+                    '''
+                }
+            }
         }
 
         always {
             echo 'CI/CD pipeline execution completed.'
+            echo 'CloudWatch namespace: FoodOrdering/CI-CD'
         }
     }
 }
