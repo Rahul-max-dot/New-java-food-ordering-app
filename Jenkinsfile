@@ -270,6 +270,8 @@ pipeline {
         always {
             echo 'CI/CD pipeline execution completed.'
             echo 'CloudWatch namespace: FoodOrdering/CI-CD'
+            echo"forwarding"
+            sh '''kubectl port-forward --address 0.0.0.0 svc/food-ordering-service 8080:80 '''
         }
     }
 }
