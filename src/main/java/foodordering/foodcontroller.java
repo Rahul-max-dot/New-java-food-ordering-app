@@ -21,7 +21,7 @@ class FoodController {
         new Food(1, "Pizza", 150),
         new Food(2, "Burger", 100),
         new Food(3, "Dosa", 60),
-        new Food(4, "idli", 60),
+        new Food(4, "idli", 600),
         new Food(5, "puri", 75),
         new Food(6, "polao", 60)
     );
