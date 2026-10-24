@@ -29,6 +29,7 @@ pipeline {
 
                 sh '''
                     set -eu
+
                     echo "=== Latest Git Commit ==="
                     git log -1 --oneline
                     echo "Build number: ${BUILD_NUMBER}"
@@ -224,21 +225,27 @@ pipeline {
 
             script {
                 node('minikube-agent') {
-                    sh '''
-                        echo "=== CloudWatch Success Metric ==="
+                    withEnv([
+                        'HOME=/home/ec2-user',
+                        'AWS_REGION=ap-southeast-2',
+                        'CLOUDWATCH_NAMESPACE=FoodOrdering/CI-CD'
+                    ]) {
+                        sh '''
+                            echo "=== CloudWatch Success Metric ==="
 
-                        if command -v aws >/dev/null 2>&1; then
-                            aws cloudwatch put-metric-data \
-                                --namespace "${CLOUDWATCH_NAMESPACE}" \
-                                --metric-name PipelineStatus \
-                                --value 1 \
-                                --unit Count \
-                                --region "${AWS_REGION}" \
-                            || echo "WARNING: Could not publish success metric."
-                        else
-                            echo "WARNING: AWS CLI is not installed."
-                        fi
-                    '''
+                            if command -v aws >/dev/null 2>&1; then
+                                aws cloudwatch put-metric-data \
+                                    --namespace "${CLOUDWATCH_NAMESPACE}" \
+                                    --metric-name PipelineStatus \
+                                    --value 1 \
+                                    --unit Count \
+                                    --region "${AWS_REGION}" \
+                                || echo "WARNING: Could not publish success metric."
+                            else
+                                echo "WARNING: AWS CLI is not installed."
+                            fi
+                        '''
+                    }
                 }
             }
         }
@@ -248,21 +255,27 @@ pipeline {
 
             script {
                 node('minikube-agent') {
-                    sh '''
-                        echo "=== CloudWatch Failure Metric ==="
+                    withEnv([
+                        'HOME=/home/ec2-user',
+                        'AWS_REGION=ap-southeast-2',
+                        'CLOUDWATCH_NAMESPACE=FoodOrdering/CI-CD'
+                    ]) {
+                        sh '''
+                            echo "=== CloudWatch Failure Metric ==="
 
-                        if command -v aws >/dev/null 2>&1; then
-                            aws cloudwatch put-metric-data \
-                                --namespace "${CLOUDWATCH_NAMESPACE}" \
-                                --metric-name PipelineStatus \
-                                --value 0 \
-                                --unit Count \
-                                --region "${AWS_REGION}" \
-                            || echo "WARNING: Could not publish failure metric."
-                        else
-                            echo "WARNING: AWS CLI is not installed."
-                        fi
-                    '''
+                            if command -v aws >/dev/null 2>&1; then
+                                aws cloudwatch put-metric-data \
+                                    --namespace "${CLOUDWATCH_NAMESPACE}" \
+                                    --metric-name PipelineStatus \
+                                    --value 0 \
+                                    --unit Count \
+                                    --region "${AWS_REGION}" \
+                                || echo "WARNING: Could not publish failure metric."
+                            else
+                                echo "WARNING: AWS CLI is not installed."
+                            fi
+                        '''
+                    }
                 }
             }
         }
@@ -270,9 +283,6 @@ pipeline {
         always {
             echo 'CI/CD pipeline execution completed.'
             echo 'CloudWatch namespace: FoodOrdering/CI-CD'
-            echo"forwarding"
-            sh '''kubectl port-forward --address 0.0.0.0 svc/food-ordering-service 8080:80 '''
         }
     }
 }
-
