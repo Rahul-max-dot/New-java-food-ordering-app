@@ -78,8 +78,8 @@ pipeline {
 
                     echo "=== Find Profile ==="
                     find /home /root \
-                        -path '*/profiles/minikube/config.json' \
-                        2>/dev/null || true
+                      -path '*/profiles/minikube/config.json' \
+                      2>/dev/null || true
                 '''
             }
         }
@@ -184,7 +184,6 @@ pipeline {
     }
 
     post {
-
         success {
             echo 'SUCCESS: Food Ordering application deployed!'
 
@@ -203,7 +202,6 @@ pipeline {
                             --metric-name PipelineStatus \
                             --value 1 \
                             --unit Count \
-                            --dimensions "Name=Application,Value=FoodOrdering" "Name=Pipeline,Value=Jenkins" \
                             --region "$AWS_REGION" \
                         || echo "WARNING: Failed to publish success metric."
                     '''
@@ -229,7 +227,6 @@ pipeline {
                             --metric-name PipelineStatus \
                             --value 0 \
                             --unit Count \
-                            --dimensions "Name=Application,Value=FoodOrdering" "Name=Pipeline,Value=Jenkins" \
                             --region "$AWS_REGION" \
                         || echo "WARNING: Failed to publish failure metric."
                     '''
@@ -243,4 +240,3 @@ pipeline {
         }
     }
 }
-
