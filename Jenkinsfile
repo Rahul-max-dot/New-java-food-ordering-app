@@ -27,8 +27,9 @@ pipeline {
                 deleteDir()
                 checkout scm
 
-                echo '=== Latest Git Commit ==='
                 sh '''
+                    set -eu
+                    echo "=== Latest Git Commit ==="
                     git log -1 --oneline
                     echo "Build number: ${BUILD_NUMBER}"
                 '''
@@ -62,10 +63,9 @@ pipeline {
                     test -f target/food-ordering-0.0.1-SNAPSHOT.jar
                     ls -lh target/food-ordering-0.0.1-SNAPSHOT.jar
 
-                    echo "=== Check Packaged Application Resources ==="
+                    echo "=== Verify HTML Resource ==="
                     jar tf target/food-ordering-0.0.1-SNAPSHOT.jar \
-                      | grep -E 'BOOT-INF/classes/(static|templates)/.*index.html' \
-                      || true
+                        | grep 'BOOT-INF/classes/static/index.html'
                 '''
 
                 archiveArtifacts(
@@ -92,11 +92,11 @@ pipeline {
                 sh '''
                     set -eu
 
-                    echo "=== Agent ==="
+                    echo "=== Agent Information ==="
                     hostname
                     whoami
 
-                    echo "=== Minikube Configuration ==="
+                    echo "=== Verify Minikube Configuration ==="
                     test -f /home/ec2-user/.minikube/profiles/minikube/config.json
                     test -f /home/ec2-user/.kube/config
 
@@ -104,7 +104,7 @@ pipeline {
                     /usr/local/bin/minikube status -p minikube
 
                     echo "=== Kubernetes Context ==="
-                    kubectl config current-context
+                    kubectl config use-context minikube
                     kubectl get nodes
                 '''
             }
@@ -133,18 +133,23 @@ pipeline {
                     export KUBECONFIG=/home/ec2-user/.kube/config
                     export PATH=/usr/local/bin:/usr/bin:/bin
 
-                    echo "=== Verify Built JAR ==="
+                    echo "=== Verify JAR ==="
                     test -f target/food-ordering-0.0.1-SNAPSHOT.jar
 
-                    echo "=== Build Unique Image Without Cache ==="
+                    echo "=== Verify Dockerfile ==="
+                    test -f Dockerfile
+                    cat Dockerfile
+
+                    echo "=== Build Unique Minikube Image ==="
                     /usr/local/bin/minikube image build \
-                        --no-cache \
                         -p "${MINIKUBE_PROFILE}" \
                         -t "${IMAGE_NAME}:${BUILD_NUMBER}" .
 
-                    echo "=== Verify Image Exists ==="
+                    echo "=== Verify Image ==="
                     /usr/local/bin/minikube image ls -p "${MINIKUBE_PROFILE}" \
                         | grep -F "${IMAGE_NAME}:${BUILD_NUMBER}"
+
+                    echo "=== Image Build Successful ==="
                 '''
             }
         }
@@ -171,24 +176,24 @@ pipeline {
                     export KUBECONFIG=/home/ec2-user/.kube/config
                     export PATH=/usr/local/bin:/usr/bin:/bin
 
-                    echo "=== Verify Kubernetes Connection ==="
+                    echo "=== Connect to Minikube ==="
                     kubectl config use-context minikube
                     kubectl get nodes
 
-                    echo "=== Verify Manifest Files ==="
+                    echo "=== Verify Kubernetes Manifests ==="
                     test -f k8s/deployment.yaml
                     test -f k8s/service.yaml
 
-                    echo "=== Apply Kubernetes Manifests ==="
+                    echo "=== Apply Deployment and Service ==="
                     kubectl apply -f k8s/deployment.yaml
                     kubectl apply -f k8s/service.yaml
 
-                    echo "=== Update Deployment Image ==="
+                    echo "=== Update Application Image ==="
                     kubectl set image \
                         deployment/${DEPLOYMENT} \
                         ${CONTAINER}=${IMAGE_NAME}:${BUILD_NUMBER}
 
-                    echo "=== Wait for Rollout ==="
+                    echo "=== Wait for Deployment Rollout ==="
                     kubectl rollout status \
                         deployment/${DEPLOYMENT} \
                         --timeout=180s
@@ -202,12 +207,10 @@ pipeline {
                     kubectl get pods -o wide
 
                     echo "=== Verify Service ==="
-                    kubectl get service food-ordering-service
+                    kubectl get services
 
-                    echo "=== Verify Running Container Image ==="
-                    kubectl get pods \
-                        -l app=food-ordering \
-                        -o jsonpath='{range .items[*]}{.metadata.name}{" : "}{.spec.containers[0].image}{"\\n"}{end}'
+                    echo "=== Verify Rollout History ==="
+                    kubectl rollout history deployment/${DEPLOYMENT}
 
                     echo "=== Deployment Successful ==="
                 '''
@@ -221,25 +224,21 @@ pipeline {
 
             script {
                 node('minikube-agent') {
-                    withEnv([
-                        "METRIC_STATUS=1"
-                    ]) {
-                        sh '''
-                            echo "=== CloudWatch Success Metric ==="
+                    sh '''
+                        echo "=== CloudWatch Success Metric ==="
 
-                            if command -v aws >/dev/null 2>&1; then
-                                aws cloudwatch put-metric-data \
-                                    --namespace "${CLOUDWATCH_NAMESPACE}" \
-                                    --metric-name PipelineStatus \
-                                    --value "${METRIC_STATUS}" \
-                                    --unit Count \
-                                    --region "${AWS_REGION}" \
-                                || echo "WARNING: CloudWatch metric failed."
-                            else
-                                echo "WARNING: AWS CLI is not installed."
-                            fi
-                        '''
-                    }
+                        if command -v aws >/dev/null 2>&1; then
+                            aws cloudwatch put-metric-data \
+                                --namespace "${CLOUDWATCH_NAMESPACE}" \
+                                --metric-name PipelineStatus \
+                                --value 1 \
+                                --unit Count \
+                                --region "${AWS_REGION}" \
+                            || echo "WARNING: Could not publish success metric."
+                        else
+                            echo "WARNING: AWS CLI is not installed."
+                        fi
+                    '''
                 }
             }
         }
@@ -249,25 +248,21 @@ pipeline {
 
             script {
                 node('minikube-agent') {
-                    withEnv([
-                        "METRIC_STATUS=0"
-                    ]) {
-                        sh '''
-                            echo "=== CloudWatch Failure Metric ==="
+                    sh '''
+                        echo "=== CloudWatch Failure Metric ==="
 
-                            if command -v aws >/dev/null 2>&1; then
-                                aws cloudwatch put-metric-data \
-                                    --namespace "${CLOUDWATCH_NAMESPACE}" \
-                                    --metric-name PipelineStatus \
-                                    --value "${METRIC_STATUS}" \
-                                    --unit Count \
-                                    --region "${AWS_REGION}" \
-                                || echo "WARNING: CloudWatch metric failed."
-                            else
-                                echo "WARNING: AWS CLI is not installed."
-                            fi
-                        '''
-                    }
+                        if command -v aws >/dev/null 2>&1; then
+                            aws cloudwatch put-metric-data \
+                                --namespace "${CLOUDWATCH_NAMESPACE}" \
+                                --metric-name PipelineStatus \
+                                --value 0 \
+                                --unit Count \
+                                --region "${AWS_REGION}" \
+                            || echo "WARNING: Could not publish failure metric."
+                        else
+                            echo "WARNING: AWS CLI is not installed."
+                        fi
+                    '''
                 }
             }
         }
