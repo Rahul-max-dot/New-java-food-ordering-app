@@ -203,9 +203,7 @@ pipeline {
                             --metric-name PipelineStatus \
                             --value 1 \
                             --unit Count \
-                            --dimensions \
-                                Application=FoodOrdering \
-                                Pipeline=Jenkins \
+                            --dimensions "Name=Application,Value=FoodOrdering" "Name=Pipeline,Value=Jenkins" \
                             --region "$AWS_REGION" \
                         || echo "WARNING: Failed to publish success metric."
                     '''
@@ -231,9 +229,7 @@ pipeline {
                             --metric-name PipelineStatus \
                             --value 0 \
                             --unit Count \
-                            --dimensions \
-                                Application=FoodOrdering \
-                                Pipeline=Jenkins \
+                            --dimensions "Name=Application,Value=FoodOrdering" "Name=Pipeline,Value=Jenkins" \
                             --region "$AWS_REGION" \
                         || echo "WARNING: Failed to publish failure metric."
                     '''
@@ -247,3 +243,4 @@ pipeline {
         }
     }
 }
+
